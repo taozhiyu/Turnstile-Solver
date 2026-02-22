@@ -9,8 +9,7 @@ import asyncio
 import argparse
 from quart import Quart, request, jsonify
 from camoufox.async_api import AsyncCamoufox
-from patchright.async_api import async_playwright
-
+from patchright.async_api import async_playwright, Route, Request
 
 COLORS = {
     'MAGENTA': '\033[35m',
@@ -53,7 +52,8 @@ logger.addHandler(handler)
 
 class TurnstileAPIServer:
 
-    def __init__(self, headless: bool, useragent: str, debug: bool, browser_type: str, thread: int, proxy_support: bool):
+    def __init__(self, headless: bool, useragent: str, debug: bool, browser_type: str, thread: int,
+                 proxy_support: bool):
         self.app = Quart(__name__)
         self.debug = debug
         self.results = self._load_results()
@@ -123,15 +123,15 @@ class TurnstileAPIServer:
             elif self.browser_type == "camoufox":
                 browser = await camoufox.start()
 
-            await self.browser_pool.put((_+1, browser))
+            await self.browser_pool.put((_ + 1, browser))
 
             if self.debug:
                 logger.success(f"Browser {_ + 1} initialized successfully")
 
         logger.success(f"Browser pool initialized with {self.browser_pool.qsize()} browsers")
 
-
-    async def _solve_turnstile(self, cf_selector: str, task_id: str, url: str, sitekey: str, action: str = None, cdata: str = None):
+    async def _solve_turnstile(self, cf_selector: str, task_id: str, url: str, sitekey: str, action: str = None,
+                               cdata: str = None):
         """Solve the Turnstile challenge."""
         proxy = None
 
@@ -151,7 +151,9 @@ class TurnstileAPIServer:
                     context = await browser.new_context(proxy={"server": f"{proxy}"})
                 elif len(parts) == 5:
                     proxy_scheme, proxy_ip, proxy_port, proxy_user, proxy_pass = parts
-                    context = await browser.new_context(proxy={"server": f"{proxy_scheme}://{proxy_ip}:{proxy_port}", "username": proxy_user, "password": proxy_pass})
+                    context = await browser.new_context(
+                        proxy={"server": f"{proxy_scheme}://{proxy_ip}:{proxy_port}", "username": proxy_user,
+                               "password": proxy_pass})
                 else:
                     raise ValueError("Invalid proxy format")
             else:
@@ -163,12 +165,66 @@ class TurnstileAPIServer:
 
         start_time = time.time()
 
-        try:
-            if self.debug:
-                logger.debug(f"Browser {index}: Starting Turnstile solve for URL: {url} with Sitekey: {sitekey} | Proxy: {proxy}")
-                logger.debug(f"Browser {index}: Setting up page data and route")
+        # ── 构造注入页面 ──────────────────────────────────────────────────────────
+        # data-* 属性按需拼接，避免空值污染
+        extra_attrs = ""
+        if action:
+            extra_attrs += f' data-action="{action}"'
+        if cdata:
+            extra_attrs += f' data-cdata="{cdata}"'
 
-            await page.goto(url)
+        injected_html = f"""<!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <!--
+            仅保留 Turnstile api.js。
+            浏览器仍处于目标 URL 的 Origin，满足 Cloudflare 域名校验。
+          -->
+          <script src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+                  async defer></script>
+        </head>
+        <body>
+          <div class="cf-turnstile"
+               data-sitekey="{sitekey}"{extra_attrs}
+               style="width:70px">
+          </div>
+        </body>
+        </html>"""
+
+        # ── 路由拦截：只替换第一个主文档，其余请求（api.js 等）正常放行 ──────────
+        intercepted = {"done": False}
+
+        async def _intercept(route: Route, req: Request):
+            # 仅拦截一次主文档导航，其余资源（Cloudflare js、字体等）全部放行
+            if not intercepted["done"] and req.resource_type == "document":
+                intercepted["done"] = True
+                if self.debug:
+                    logger.debug(
+                        f"Browser {index}: Intercepted document request → "
+                        f"injecting Turnstile-only page | url={req.url}"
+                    )
+                await route.fulfill(
+                    status=200,
+                    content_type="text/html; charset=utf-8",
+                    body=injected_html,
+                )
+            else:
+                await route.continue_()
+
+        await page.route("**/*", _intercept)
+
+        try:
+
+            if self.debug:
+                logger.debug(
+                    f"Browser {index}: Navigating to {url} "
+                    f"(response will be replaced by injected HTML)"
+                )
+
+            # wait_until="commit" 表示拿到响应头即可，不等待页面资源全部加载完毕。
+            # 配合路由拦截，浏览器几乎立即拿到我们的自定义 HTML。
+            await page.goto(url, wait_until="commit")
 
             if self.debug:
                 logger.debug(f"Browser {index}: Setting up Turnstile widget dimensions")
@@ -186,13 +242,15 @@ class TurnstileAPIServer:
                     if turnstile_check == "":
                         if self.debug:
                             logger.debug(f"Browser {index}: Attempt {_} - No Turnstile response yet")
-
-                        await page.locator(f"{cf_selector}").click(timeout=5000)
+                        # 使用注入页面里固定的 .cf-turnstile，也兼容外部传入的 cf_selector
+                        target = cf_selector if cf_selector else ".cf-turnstile"
+                        await page.locator(target).click(timeout=5000)
                         await asyncio.sleep(0.5)
                     else:
                         elapsed_time = round(time.time() - start_time, 3)
 
-                        logger.success(f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{turnstile_check[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds")
+                        logger.success(
+                            f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{turnstile_check[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds")
 
                         self.results[task_id] = {"value": turnstile_check, "elapsed_time": elapsed_time}
                         self._save_results()
@@ -200,12 +258,13 @@ class TurnstileAPIServer:
                 except Exception as e:
                     logger.info(f"Exception occurred while trying to solve {e}")
                     pass
-
-            if self.results.get(task_id) == "CAPTCHA_NOT_READY":
+            # 循环结束仍未写入结果 → 标记失败
+            if task_id not in self.results or self.results[task_id] == "CAPTCHA_NOT_READY":
                 elapsed_time = round(time.time() - start_time, 3)
                 self.results[task_id] = {"value": "CAPTCHA_FAIL", "elapsed_time": elapsed_time}
                 if self.debug:
-                    logger.error(f"Browser {index}: Error solving Turnstile in {COLORS.get('RED')}{elapsed_time}{COLORS.get('RESET')} Seconds")
+                    logger.error(
+                        f"Browser {index}: Error solving Turnstile in {COLORS.get('RED')}{elapsed_time}{COLORS.get('RESET')} Seconds")
         except Exception as e:
             elapsed_time = round(time.time() - start_time, 3)
             self.results[task_id] = {"value": "CAPTCHA_FAIL", "elapsed_time": elapsed_time}
@@ -215,6 +274,8 @@ class TurnstileAPIServer:
             if self.debug:
                 logger.debug(f"Browser {index}: Clearing page state")
 
+            await page.unroute("**/*", _intercept)  # 清理路由，防止内存泄漏
+
             await context.close()
             await self.browser_pool.put((index, browser))
 
@@ -223,7 +284,7 @@ class TurnstileAPIServer:
 
         data = await request.get_json()
         url = data.get("url")
-        cf_selector = data.get("cf_selector")
+        cf_selector = data.get("cf_selector") or ".cf-turnstile"
         sitekey = data.get("sitekey")
         action = data.get("action")
         cdata = data.get("cdata")
@@ -238,7 +299,9 @@ class TurnstileAPIServer:
         self.results[task_id] = "CAPTCHA_NOT_READY"
 
         try:
-            asyncio.create_task(self._solve_turnstile(cf_selector=cf_selector, task_id=task_id, url=url, sitekey=sitekey, action=action, cdata=cdata))
+            asyncio.create_task(
+                self._solve_turnstile(cf_selector=cf_selector, task_id=task_id, url=url, sitekey=sitekey, action=action,
+                                      cdata=cdata))
 
             if self.debug:
                 logger.debug(f"Request completed with taskid {task_id}.")
@@ -311,19 +374,29 @@ def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Turnstile API Server")
 
-    parser.add_argument('--headless', type=bool, default=False, help='Run the browser in headless mode, without opening a graphical interface. This option requires the --useragent argument to be set (default: False)')
-    parser.add_argument('--useragent', type=str, default=None, help='Specify a custom User-Agent string for the browser. If not provided, the default User-Agent is used')
-    parser.add_argument('--debug', type=bool, default=False, help='Enable or disable debug mode for additional logging and troubleshooting information (default: False)')
-    parser.add_argument('--browser_type', type=str, default='chromium', help='Specify the browser type for the solver. Supported options: chromium, chrome, msedge, camoufox (default: chromium)')
-    parser.add_argument('--thread', type=int, default=1, help='Set the number of browser threads to use for multi-threaded mode. Increasing this will speed up execution but requires more resources (default: 1)')
-    parser.add_argument('--proxy', type=bool, default=False, help='Enable proxy support for the solver (Default: False)')
-    parser.add_argument('--host', type=str, default='127.0.0.1', help='Specify the IP address where the API solver runs. (Default: 127.0.0.1)')
-    parser.add_argument('--port', type=str, default='5000', help='Set the port for the API solver to listen on. (Default: 5000)')
+    parser.add_argument('--headless', type=bool, default=False,
+                        help='Run the browser in headless mode, without opening a graphical interface. This option requires the --useragent argument to be set (default: False)')
+    parser.add_argument('--useragent', type=str, default=None,
+                        help='Specify a custom User-Agent string for the browser. If not provided, the default User-Agent is used')
+    parser.add_argument('--debug', type=bool, default=False,
+                        help='Enable or disable debug mode for additional logging and troubleshooting information (default: False)')
+    parser.add_argument('--browser_type', type=str, default='chromium',
+                        help='Specify the browser type for the solver. Supported options: chromium, chrome, msedge, camoufox (default: chromium)')
+    parser.add_argument('--thread', type=int, default=1,
+                        help='Set the number of browser threads to use for multi-threaded mode. Increasing this will speed up execution but requires more resources (default: 1)')
+    parser.add_argument('--proxy', type=bool, default=False,
+                        help='Enable proxy support for the solver (Default: False)')
+    parser.add_argument('--host', type=str, default='127.0.0.1',
+                        help='Specify the IP address where the API solver runs. (Default: 127.0.0.1)')
+    parser.add_argument('--port', type=str, default='5000',
+                        help='Set the port for the API solver to listen on. (Default: 5000)')
     return parser.parse_args()
 
 
-def create_app(headless: bool, useragent: str, debug: bool, browser_type: str, thread: int, proxy_support: bool) -> Quart:
-    server = TurnstileAPIServer(headless=headless, useragent=useragent, debug=debug, browser_type=browser_type, thread=thread, proxy_support=proxy_support)
+def create_app(headless: bool, useragent: str, debug: bool, browser_type: str, thread: int,
+               proxy_support: bool) -> Quart:
+    server = TurnstileAPIServer(headless=headless, useragent=useragent, debug=debug, browser_type=browser_type,
+                                thread=thread, proxy_support=proxy_support)
     return server.app
 
 
@@ -336,9 +409,12 @@ if __name__ == '__main__':
         'camoufox',
     ]
     if args.browser_type not in browser_types:
-        logger.error(f"Unknown browser type: {COLORS.get('RED')}{args.browser_type}{COLORS.get('RESET')} Available browser types: {browser_types}")
+        logger.error(
+            f"Unknown browser type: {COLORS.get('RED')}{args.browser_type}{COLORS.get('RESET')} Available browser types: {browser_types}")
     elif args.headless is True and args.useragent is None and "camoufox" not in args.browser_type:
-        logger.error(f"You must specify a {COLORS.get('YELLOW')}User-Agent{COLORS.get('RESET')} for Turnstile Solver or use {COLORS.get('GREEN')}camoufox{COLORS.get('RESET')} without useragent")
+        logger.error(
+            f"You must specify a {COLORS.get('YELLOW')}User-Agent{COLORS.get('RESET')} for Turnstile Solver or use {COLORS.get('GREEN')}camoufox{COLORS.get('RESET')} without useragent")
     else:
-        app = create_app(headless=args.headless, debug=args.debug, useragent=args.useragent, browser_type=args.browser_type, thread=args.thread, proxy_support=args.proxy)
+        app = create_app(headless=args.headless, debug=args.debug, useragent=args.useragent,
+                         browser_type=args.browser_type, thread=args.thread, proxy_support=args.proxy)
         app.run(host=args.host, port=int(args.port))
