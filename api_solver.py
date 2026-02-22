@@ -58,7 +58,7 @@ class TurnstileAPIServer:
         self.debug = debug
         self.results = self._load_results()
         self.browser_type = browser_type
-        self.headless = False # headless
+        self.headless = headless
         self.useragent = useragent
         self.thread_count = thread
         self.proxy_support = proxy_support
