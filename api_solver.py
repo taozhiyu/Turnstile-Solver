@@ -164,6 +164,9 @@ class TurnstileAPIServer:
                     context = await browser.new_context(
                         proxy={"server": f"{proxy_scheme}://{proxy_ip}:{proxy_port}", "username": proxy_user,
                                "password": proxy_pass})
+                    context = await browser.new_context(
+                        proxy={"server": f"{proxy_scheme}://{proxy_ip}:{proxy_port}", "username": proxy_user,
+                               "password": proxy_pass})
                 else:
                     raise ValueError("Invalid proxy format")
             else:
@@ -235,6 +238,14 @@ class TurnstileAPIServer:
             # wait_until="commit" 表示拿到响应头即可，不等待页面资源全部加载完毕。
             # 配合路由拦截，浏览器几乎立即拿到我们的自定义 HTML。
             await page.goto(url, wait_until="commit")
+                logger.debug(
+                    f"Browser {index}: Navigating to {url} "
+                    f"(response will be replaced by injected HTML)"
+                )
+
+            # wait_until="commit" 表示拿到响应头即可，不等待页面资源全部加载完毕。
+            # 配合路由拦截，浏览器几乎立即拿到我们的自定义 HTML。
+            await page.goto(url, wait_until="commit")
 
             if self.debug:
                 logger.debug(f"Browser {index}: Setting up Turnstile widget dimensions")
@@ -258,6 +269,8 @@ class TurnstileAPIServer:
                     else:
                         elapsed_time = round(time.time() - start_time, 3)
 
+                        logger.success(
+                            f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{turnstile_check[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds")
                         logger.success(
                             f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{turnstile_check[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds")
 
@@ -287,6 +300,8 @@ class TurnstileAPIServer:
                 if self.debug:
                     logger.error(
                         f"Browser {index}: Error solving Turnstile in {COLORS.get('RED')}{elapsed_time}{COLORS.get('RESET')} Seconds")
+                    logger.error(
+                        f"Browser {index}: Error solving Turnstile in {COLORS.get('RED')}{elapsed_time}{COLORS.get('RESET')} Seconds")
         except Exception as e:
             elapsed_time = round(time.time() - start_time, 3)
             created_at = time.time()
@@ -308,6 +323,8 @@ class TurnstileAPIServer:
 
             await page.unroute("**/*", _intercept)  # 清理路由，防止内存泄漏
 
+            await page.unroute("**/*", _intercept)  # 清理路由，防止内存泄漏
+
             await context.close()
             await self.browser_pool.put((index, browser))
 
@@ -316,6 +333,7 @@ class TurnstileAPIServer:
 
         data = await request.get_json()
         url = data.get("url")
+        cf_selector = data.get("cf_selector") or ".cf-turnstile"
         cf_selector = data.get("cf_selector") or ".cf-turnstile"
         sitekey = data.get("sitekey")
         action = data.get("action")
@@ -332,6 +350,9 @@ class TurnstileAPIServer:
         self.results[task_id] = {"status": "pending", "created_at": time.time()}
 
         try:
+            asyncio.create_task(
+                self._solve_turnstile(cf_selector=cf_selector, task_id=task_id, url=url, sitekey=sitekey, action=action,
+                                      cdata=cdata))
             asyncio.create_task(
                 self._solve_turnstile(cf_selector=cf_selector, task_id=task_id, url=url, sitekey=sitekey, action=action,
                                       cdata=cdata))
