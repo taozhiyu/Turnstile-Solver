@@ -175,3 +175,6 @@ cython_debug/
 
 # PyCharm
 .idea/
+
+# Runtime cache
+results.json

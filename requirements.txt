@@ -1,4 +1,2 @@
 quart
-asyncio
-patchright
 camoufox[geoip]
