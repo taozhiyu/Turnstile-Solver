@@ -91,17 +91,7 @@
 
 ### 🐳 Docker 部署
 
-#### 本地构建
-
-```bash
-docker build -t turnstile-solver .
-docker run -d -p 5000:5000 --name turnstile_solver turnstile-solver
-```
-
-
 #### 使用 GitHub Container Registry
-
-尚未实现（发布），请优先自行构建或安装
 
 多平台镜像（amd64 和 arm64）通过 GitHub Actions 自动构建并发布。
 
@@ -129,6 +119,14 @@ docker run -d \
   ghcr.io/taozhiyu/turnstile-solver:latest \
   --host 0.0.0.0 --port 5000 --thread 2 --max_cache_age 7200
 ```
+
+#### 本地构建
+
+```bash
+docker build -t turnstile-solver .
+docker run -d -p 5000:5000 --name turnstile_solver turnstile-solver
+```
+
 
 ---
 

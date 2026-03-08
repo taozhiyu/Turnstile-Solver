@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>Turnstile Solver API</title>
+  <meta name="description" content="Open-source Cloudflare Turnstile challenge solver API. Fast, reliable, and community-maintained.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS v4 Browser -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <style type="text/tailwindcss">
+    :root {
+      --background: oklch(0.13 0.005 260);
+      --foreground: oklch(0.93 0.005 260);
+      --card: oklch(0.17 0.005 260);
+      --card-foreground: oklch(0.93 0.005 260);
+      --popover: oklch(0.17 0.005 260);
+      --popover-foreground: oklch(0.93 0.005 260);
+      --primary: oklch(0.62 0.22 25);
+      --primary-foreground: oklch(0.98 0.005 0);
+      --secondary: oklch(0.22 0.005 260);
+      --secondary-foreground: oklch(0.88 0.005 260);
+      --muted: oklch(0.22 0.005 260);
+      --muted-foreground: oklch(0.62 0.01 260);
+      --accent: oklch(0.62 0.22 25);
+      --accent-foreground: oklch(0.98 0.005 0);
+      --destructive: oklch(0.577 0.245 27.325);
+      --destructive-foreground: oklch(0.577 0.245 27.325);
+      --border: oklch(0.28 0.01 260);
+      --input: oklch(0.22 0.005 260);
+      --ring: oklch(0.62 0.22 25);
+      --radius: 0.75rem;
+      --font-inter: 'Inter', system-ui, sans-serif;
+      --font-jetbrains-mono: 'JetBrains Mono', monospace;
+    }
+
+    @theme inline {
+      --font-sans: var(--font-inter);
+      --font-mono: var(--font-jetbrains-mono);
+      --color-background: var(--background);
+      --color-foreground: var(--foreground);
+      --color-card: var(--card);
+      --color-card-foreground: var(--card-foreground);
+      --color-popover: var(--popover);
+      --color-popover-foreground: var(--popover-foreground);
+      --color-primary: var(--primary);
+      --color-primary-foreground: var(--primary-foreground);
+      --color-secondary: var(--secondary);
+      --color-secondary-foreground: var(--secondary-foreground);
+      --color-muted: var(--muted);
+      --color-muted-foreground: var(--muted-foreground);
+      --color-accent: var(--accent);
+      --color-accent-foreground: var(--accent-foreground);
+      --color-destructive: var(--destructive);
+      --color-destructive-foreground: var(--destructive-foreground);
+      --color-border: var(--border);
+      --color-input: var(--input);
+      --color-ring: var(--ring);
+      --radius-sm: calc(var(--radius) - 4px);
+      --radius-md: calc(var(--radius) - 2px);
+      --radius-lg: var(--radius);
+      --radius-xl: calc(var(--radius) + 4px);
+    }
+
+    @layer base {
+      * {
+        @apply border-border outline-ring/50;
+      }
+      body {
+        @apply bg-background text-foreground;
+      }
+    }
+  </style>
+</head>
+<body class="font-sans antialiased">
+  <div class="min-h-screen bg-background">
+
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+      <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+        <div class="flex items-center gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <span class="text-sm font-bold text-primary-foreground">T</span>
+          </div>
+          <span class="text-lg font-semibold text-foreground">Turnstile Solver</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="https://github.com/taozhiyu/Turnstile-Solver" target="_blank" rel="noopener noreferrer"
+            class="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="GitHub">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          </a>
+          <button id="lang-toggle" onclick="toggleLocale()"
+            class="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Switch language">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            <span data-i18n="langSwitch">CN</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Hero Section -->
+      <section class="relative flex flex-col items-center px-6 pt-32 pb-16 text-center md:pt-40 md:pb-24">
+        <!-- Background glow -->
+        <div class="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-primary/5 blur-3xl"></div>
+
+        <div class="relative z-10 flex max-w-3xl flex-col items-center gap-6">
+          <div class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm text-primary">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+              <span class="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+            </span>
+            <span data-i18n="openSourceLive">Open Source</span>
+          </div>
+
+          <h1 class="text-balance text-4xl font-bold tracking-tight text-foreground md:text-6xl" data-i18n="title">
+            Turnstile Solver API
+          </h1>
+
+          <p class="text-pretty text-lg leading-relaxed text-muted-foreground md:text-xl" data-i18n="description">
+            Solve Turnstile challenges programmatically with a simple POST request. Fast, reliable, and community-maintained.
+          </p>
+
+          <div class="flex flex-col items-center gap-3 sm:flex-row">
+            <a href="#quickstart"
+              class="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+              <span data-i18n="getStarted">Get Started</span>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </a>
+            <a href="https://github.com/taozhiyu/Turnstile-Solver" target="_blank" rel="noopener noreferrer"
+              class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-secondary">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              <span data-i18n="viewOnGithub">View on GitHub</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- API / Quick Start Section -->
+      <section id="quickstart" class="mx-auto max-w-5xl px-6 py-16 md:py-24">
+        <div class="mb-12 text-center">
+          <h2 class="text-balance text-3xl font-bold text-foreground md:text-4xl" data-i18n="quickStart">
+            Quick Start
+          </h2>
+        </div>
+
+        <div class="grid gap-8 lg:grid-cols-2">
+          <!-- Left: Endpoint & Parameters -->
+          <div class="flex flex-col gap-6">
+            <!-- Endpoint Card -->
+            <div class="rounded-xl border border-border bg-card p-6">
+              <div class="mb-4 flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-foreground" data-i18n="apiEndpoint">API Endpoint</h3>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 rounded-lg bg-secondary p-3">
+                <span class="rounded-md bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary" data-i18n="endpointMethod">POST</span>
+                <code class="text-sm text-foreground font-mono" data-i18n="endpointPath">/turnstile</code>
+              </div>
+            </div>
+
+            <!-- Parameters Card -->
+            <div class="rounded-xl border border-border bg-card p-6">
+              <div class="mb-4 flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg>
+                </div>
+                <h3 class="text-lg font-semibold text-foreground" data-i18n="parameters">Parameters</h3>
+              </div>
+              <p class="mb-4 text-sm text-muted-foreground" data-i18n="requestBodyDesc">Send a JSON body with the following fields:</p>
+              <div class="flex flex-col gap-3">
+                <!-- url parameter -->
+                <div class="rounded-lg bg-secondary/50 p-3">
+                  <div class="mb-1 flex items-center gap-2">
+                    <code class="text-sm font-semibold text-primary font-mono" data-i18n="fieldUrl">url</code>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground" data-i18n="stringType">string</span>
+                    <span class="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary" data-i18n="requiredField">Required</span>
+                  </div>
+                  <p class="text-sm text-muted-foreground" data-i18n="fieldUrlDesc">The URL where Turnstile is to be validated</p>
+                </div>
+                <!-- sitekey parameter -->
+                <div class="rounded-lg bg-secondary/50 p-3">
+                  <div class="mb-1 flex items-center gap-2">
+                    <code class="text-sm font-semibold text-primary font-mono" data-i18n="fieldSitekey">sitekey</code>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground" data-i18n="stringType2">string</span>
+                    <span class="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary" data-i18n="requiredField2">Required</span>
+                  </div>
+                  <p class="text-sm text-muted-foreground" data-i18n="fieldSitekeyDesc">The site key for Turnstile</p>
+                </div>
+                <!-- action parameter -->
+                <div class="rounded-lg bg-secondary/50 p-3">
+                  <div class="mb-1 flex items-center gap-2">
+                    <code class="text-sm font-semibold text-primary font-mono">action</code>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">string</span>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground" data-i18n="optionalField">Optional</span>
+                  </div>
+                  <p class="text-sm text-muted-foreground" data-i18n="fieldActionDesc">Action to trigger during CAPTCHA solving, e.g. login</p>
+                </div>
+                <!-- cdata parameter -->
+                <div class="rounded-lg bg-secondary/50 p-3">
+                  <div class="mb-1 flex items-center gap-2">
+                    <code class="text-sm font-semibold text-primary font-mono">cdata</code>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">string</span>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground" data-i18n="optionalField2">Optional</span>
+                  </div>
+                  <p class="text-sm text-muted-foreground" data-i18n="fieldCdataDesc">Custom data for additional CAPTCHA parameters</p>
+                </div>
+                <!-- cf_selector parameter -->
+                <div class="rounded-lg bg-secondary/50 p-3">
+                  <div class="mb-1 flex items-center gap-2">
+                    <code class="text-sm font-semibold text-primary font-mono">cf_selector</code>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">string</span>
+                    <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground" data-i18n="optionalField3">Optional</span>
+                  </div>
+                  <p class="text-sm text-muted-foreground" data-i18n="fieldCfSelectorDesc">Custom CSS selector for the Turnstile widget (default: .cf-turnstile)</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Code Examples -->
+          <div class="flex flex-col gap-6">
+            <div>
+              <h3 class="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider" data-i18n="exampleRequest">Request</h3>
+              <!-- Code Block: Request -->
+              <div class="overflow-hidden rounded-lg border border-border">
+                <div class="flex items-center justify-between border-b border-border bg-secondary/50 px-4 py-2">
+                  <span class="text-xs font-medium text-muted-foreground">cURL</span>
+                  <button onclick="copyCode(this, 'request')"
+                    class="copy-btn flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    data-state="idle">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 copy-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 check-icon hidden text-green-400"><path d="M20 6 9 17l-5-5"/></svg>
+                    <span class="copy-label" data-i18n-copy="copyCommand">Copy</span>
+                  </button>
+                </div>
+                <pre class="overflow-x-auto bg-card p-4"><code class="text-sm leading-relaxed text-foreground font-mono" id="code-request">curl -X POST https://your-domain.com/turnstile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "sitekey": "0x4AAAAAAA..."
+  }'</code></pre>
+              </div>
+            </div>
+            <div>
+              <h3 class="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider" data-i18n="responseExample">Response</h3>
+              <p class="mb-3 text-sm text-muted-foreground" data-i18n="responseDesc">The API returns a task ID. Use it to query the result:</p>
+              <!-- Code Block: Create Response -->
+              <div class="overflow-hidden rounded-lg border border-border mb-4">
+                <div class="flex items-center justify-between border-b border-border bg-secondary/50 px-4 py-2">
+                  <span class="text-xs font-medium text-muted-foreground">JSON — 202 Created</span>
+                  <button onclick="copyCode(this, 'response')"
+                    class="copy-btn flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    data-state="idle">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 copy-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 check-icon hidden text-green-400"><path d="M20 6 9 17l-5-5"/></svg>
+                    <span class="copy-label" data-i18n-copy="copyCommand">Copy</span>
+                  </button>
+                </div>
+                <pre class="overflow-x-auto bg-card p-4"><code class="text-sm leading-relaxed text-foreground font-mono" id="code-response">{
+  "status": "created",
+  "task_id": "d2cbb257-9c37-4f9c-..."
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- GET /result Endpoint -->
+        <div class="mt-12">
+          <div class="rounded-xl border border-border bg-card p-6">
+            <div class="mb-4 flex items-center gap-3">
+              <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-foreground" data-i18n="getResultEndpoint">Get Result</h3>
+              </div>
+            </div>
+            <div class="mb-4 flex items-center gap-2 rounded-lg bg-secondary p-3">
+              <span class="rounded-md bg-green-500/20 px-2 py-0.5 text-xs font-bold text-green-400" data-i18n="getResultMethod">GET</span>
+              <code class="text-sm text-foreground font-mono" data-i18n="getResultPath">/result?id=&lt;task_id&gt;</code>
+            </div>
+            <p class="mb-4 text-sm text-muted-foreground" data-i18n="getResultDesc">Query the result of a solving task by task ID:</p>
+
+            <!-- id parameter -->
+            <div class="mb-4 rounded-lg bg-secondary/50 p-3">
+              <div class="mb-1 flex items-center gap-2">
+                <code class="text-sm font-semibold text-primary font-mono" data-i18n="fieldTaskId">id</code>
+                <span class="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">string</span>
+                <span class="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary" data-i18n="requiredField3">Required</span>
+              </div>
+              <p class="text-sm text-muted-foreground" data-i18n="fieldTaskIdDesc">The unique task ID returned from the /turnstile request</p>
+            </div>
+
+            <!-- Response examples -->
+            <div class="grid gap-3 md:grid-cols-3">
+              <!-- Pending -->
+              <div class="overflow-hidden rounded-lg border border-border">
+                <div class="border-b border-border bg-secondary/50 px-3 py-1.5">
+                  <span class="text-xs font-medium text-yellow-400" data-i18n="responsePending">Pending (202)</span>
+                </div>
+                <pre class="overflow-x-auto bg-card p-3"><code class="text-xs leading-relaxed text-foreground font-mono">{
+  "status": "pending"
+}</code></pre>
+              </div>
+              <!-- Success -->
+              <div class="overflow-hidden rounded-lg border border-border">
+                <div class="border-b border-border bg-secondary/50 px-3 py-1.5">
+                  <span class="text-xs font-medium text-green-400" data-i18n="responseSuccess">Success (200)</span>
+                </div>
+                <pre class="overflow-x-auto bg-card p-3"><code class="text-xs leading-relaxed text-foreground font-mono">{
+  "status": "success",
+  "data": {
+    "token": "0.KBtT-r...",
+    "elapsed_time": 7.625
+  }
+}</code></pre>
+              </div>
+              <!-- Failed -->
+              <div class="overflow-hidden rounded-lg border border-border">
+                <div class="border-b border-border bg-secondary/50 px-3 py-1.5">
+                  <span class="text-xs font-medium text-red-400" data-i18n="responseFailed">Failed (500)</span>
+                </div>
+                <pre class="overflow-x-auto bg-card p-3"><code class="text-xs leading-relaxed text-foreground font-mono">{
+  "status": "error",
+  "error": "CAPTCHA_FAIL",
+  "elapsed_time": 30.123
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Credits Section -->
+      <section class="mx-auto max-w-5xl px-6 py-16">
+        <div class="rounded-xl border border-border bg-card p-8 text-center">
+          <div class="mb-4 flex justify-center">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6 text-primary"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+            </div>
+          </div>
+          <h2 class="mb-3 text-2xl font-bold text-foreground" data-i18n="credits">Credits</h2>
+          <p class="mb-6 text-muted-foreground" id="credits-desc"></p>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <a href="https://github.com/Theyka" target="_blank" rel="noopener noreferrer"
+              class="inline-flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              Theyka
+            </a>
+            <a href="https://github.com/sexfrance" target="_blank" rel="noopener noreferrer"
+              class="inline-flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              Sexfrance
+            </a>
+            <a href="https://github.com/taozhiyu" target="_blank" rel="noopener noreferrer"
+              class="inline-flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              taozhiyu
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-border bg-card/50">
+      <div class="mx-auto flex max-w-5xl flex-col items-center gap-4 px-6 py-8 sm:flex-row sm:justify-between">
+        <div class="flex flex-col items-center gap-1 sm:items-start">
+          <span class="text-sm font-semibold text-foreground" data-i18n="footer">Open Source Project</span>
+          <span class="text-xs text-muted-foreground" data-i18n="footerDesc">Licensed under CC BY-NC 4.0. Contributions welcome.</span>
+        </div>
+        <a href="https://github.com/taozhiyu/Turnstile-Solver" target="_blank" rel="noopener noreferrer"
+          class="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </footer>
+
+  </div>
+
+  <script>
+    // ========== i18n ==========
+    const translations = {
+      en: {
+        title: "Turnstile Solver API",
+        subtitle: "An open-source Cloudflare Turnstile challenge solver",
+        description: "Solve Turnstile challenges programmatically with a simple POST request. Fast, reliable, and community-maintained.",
+        getStarted: "Get Started",
+        viewOnGithub: "View on GitHub",
+        apiEndpoint: "API Endpoint",
+        endpointMethod: "POST",
+        endpointPath: "/turnstile",
+        requestBody: "Request Body",
+        requestBodyDesc: "Send a JSON body with the following fields:",
+        fieldUrl: "url",
+        fieldUrlDesc: "The URL where Turnstile is to be validated",
+        fieldSitekey: "sitekey",
+        fieldSitekeyDesc: "The site key for Turnstile",
+        exampleUsage: "Example Usage",
+        exampleRequest: "Request",
+        credits: "Credits",
+        creditsDesc: "This project is inspired by",
+        creditsAnd: "and is currently maintained by",
+        responseExample: "Response",
+        copyCommand: "Copy",
+        copied: "Copied!",
+        requiredField: "Required",
+        stringType: "string",
+        quickStart: "Quick Start",
+        parameters: "Parameters",
+        footer: "Open Source Project",
+        footerDesc: "Licensed under CC BY-NC 4.0. Contributions welcome.",
+        langSwitch: "CN",
+        openSourceLive: "Open Source",
+        tryItNow: "Try it now",
+        responseDesc: "The API returns a task ID. Use it to query the result:",
+        fieldToken: "token",
+        fieldTokenDesc: "The solved Turnstile token",
+        optionalField: "Optional",
+        fieldActionDesc: "Action to trigger during CAPTCHA solving, e.g. login",
+        fieldCdataDesc: "Custom data for additional CAPTCHA parameters",
+        fieldCfSelectorDesc: "Custom CSS selector for the Turnstile widget (default: .cf-turnstile)",
+        getResultEndpoint: "Get Result",
+        getResultMethod: "GET",
+        getResultPath: "/result?id=<task_id>",
+        getResultDesc: "Query the result of a solving task by task ID:",
+        fieldTaskId: "id",
+        fieldTaskIdDesc: "The unique task ID returned from the /turnstile request",
+        responsePending: "Pending (202)",
+        responseSuccess: "Success (200)",
+        responseFailed: "Failed (500)",
+      },
+      zh: {
+        title: "Turnstile Solver API",
+        subtitle: "\u5f00\u6e90\u7684 Cloudflare Turnstile \u9a8c\u8bc1\u7801\u6c42\u89e3\u5668",
+        description: "\u901a\u8fc7\u7b80\u5355\u7684 POST \u8bf7\u6c42\u4ee5\u7f16\u7a0b\u65b9\u5f0f\u89e3\u51b3 Turnstile \u9a8c\u8bc1\u7801\u3002\u5feb\u901f\u3001\u53ef\u9760\uff0c\u7531\u793e\u533a\u5171\u540c\u7ef4\u62a4\u3002",
+        getStarted: "\u5feb\u901f\u5f00\u59cb",
+        viewOnGithub: "\u5728 GitHub \u67e5\u770b",
+        apiEndpoint: "API \u7aef\u70b9",
+        endpointMethod: "POST",
+        endpointPath: "/turnstile",
+        requestBody: "\u8bf7\u6c42\u4f53",
+        requestBodyDesc: "\u53d1\u9001\u5305\u542b\u4ee5\u4e0b\u5b57\u6bb5\u7684 JSON \u8bf7\u6c42\u4f53\uff1a",
+        fieldUrl: "url",
+        fieldUrlDesc: "\u9700\u8981\u9a8c\u8bc1 Turnstile \u7684\u76ee\u6807 URL",
+        fieldSitekey: "sitekey",
+        fieldSitekeyDesc: "Turnstile \u7684\u7ad9\u70b9\u5bc6\u94a5",
+        exampleUsage: "\u4f7f\u7528\u793a\u4f8b",
+        exampleRequest: "\u8bf7\u6c42",
+        credits: "\u81f4\u8c22",
+        creditsDesc: "\u672c\u9879\u76ee\u7075\u611f\u6765\u81ea",
+        creditsAnd: "\u76ee\u524d\u7531\u4ee5\u4e0b\u8d21\u732e\u8005\u7ef4\u62a4",
+        responseExample: "\u54cd\u5e94",
+        copyCommand: "\u590d\u5236",
+        copied: "\u5df2\u590d\u5236\uff01",
+        requiredField: "\u5fc5\u586b",
+        stringType: "string",
+        quickStart: "\u5feb\u901f\u5f00\u59cb",
+        parameters: "\u53c2\u6570\u8bf4\u660e",
+        footer: "\u5f00\u6e90\u9879\u76ee",
+        footerDesc: "\u57fa\u4e8e CC BY-NC 4.0 \u8bb8\u53ef\u8bc1\u3002\u6b22\u8fce\u8d21\u732e\u4ee3\u7801\u3002",
+        langSwitch: "EN",
+        openSourceLive: "\u5f00\u6e90",
+        tryItNow: "\u7acb\u5373\u8bd5\u7528",
+        responseDesc: "API \u8fd4\u56de\u4efb\u52a1 ID\uff0c\u4f7f\u7528\u8be5 ID \u67e5\u8be2\u7ed3\u679c\uff1a",
+        fieldToken: "token",
+        fieldTokenDesc: "\u5df2\u6c42\u89e3\u7684 Turnstile \u4ee4\u724c",
+        optionalField: "\u53ef\u9009",
+        fieldActionDesc: "\u9a8c\u8bc1\u7801\u6c42\u89e3\u65f6\u89e6\u53d1\u7684\u52a8\u4f5c\uff0c\u4f8b\u5982 login",
+        fieldCdataDesc: "\u7528\u4e8e\u9644\u52a0\u9a8c\u8bc1\u7801\u53c2\u6570\u7684\u81ea\u5b9a\u4e49\u6570\u636e",
+        fieldCfSelectorDesc: "\u81ea\u5b9a\u4e49 Turnstile \u7ec4\u4ef6\u7684 CSS \u9009\u62e9\u5668\uff08\u9ed8\u8ba4: .cf-turnstile\uff09",
+        getResultEndpoint: "\u83b7\u53d6\u7ed3\u679c",
+        getResultMethod: "GET",
+        getResultPath: "/result?id=<task_id>",
+        getResultDesc: "\u901a\u8fc7\u4efb\u52a1 ID \u67e5\u8be2\u6c42\u89e3\u4efb\u52a1\u7684\u7ed3\u679c\uff1a",
+        fieldTaskId: "id",
+        fieldTaskIdDesc: "\u7531 /turnstile \u8bf7\u6c42\u8fd4\u56de\u7684\u552f\u4e00\u4efb\u52a1 ID",
+        responsePending: "\u5904\u7406\u4e2d (202)",
+        responseSuccess: "\u6210\u529f (200)",
+        responseFailed: "\u5931\u8d25 (500)",
+      },
+    };
+
+    // Extra i18n keys that map to the same translation key
+    const i18nAliases = {
+      stringType2: "stringType",
+      requiredField2: "requiredField",
+      optionalField2: "optionalField",
+      optionalField3: "optionalField",
+      requiredField3: "requiredField",
+    };
+
+    let locale = getDefaultLocale();
+
+    function getDefaultLocale() {
+      const lang = navigator.language || "";
+      return lang.startsWith("zh") ? "zh" : "en";
+    }
+
+    function updateCredits() {
+      const t = translations[locale];
+      const el = document.getElementById("credits-desc");
+      if (!el) return;
+      const sep = locale === "zh" ? "\uff0c" : " ";
+      el.innerHTML =
+        t.creditsDesc +
+        ' <a href="https://github.com/Body-Alhoha/turnaround" target="_blank" rel="noopener noreferrer" class="font-medium text-primary hover:underline">Turnaround</a>' +
+        sep +
+        t.creditsAnd;
+    }
+
+    function updateLocale() {
+      const t = translations[locale];
+
+      // Update all [data-i18n] elements
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        let key = el.getAttribute("data-i18n");
+        if (i18nAliases[key]) key = i18nAliases[key];
+        if (t[key] !== undefined) el.textContent = t[key];
+      });
+
+      // Update copy button labels (only those in idle state)
+      document.querySelectorAll("[data-i18n-copy]").forEach(function (el) {
+        const btn = el.closest(".copy-btn");
+        if (btn && btn.getAttribute("data-state") === "idle") {
+          el.textContent = t.copyCommand;
+        }
+      });
+
+      // Update credits section (has inline HTML)
+      updateCredits();
+    }
+
+    function toggleLocale() {
+      locale = locale === "en" ? "zh" : "en";
+      updateLocale();
+    }
+
+    // ========== Copy to clipboard ==========
+    const codeSnippets = {
+      request:
+        'curl -X POST https://your-domain.com/turnstile \\\n  -H "Content-Type: application/json" \\\n  -d \'{\n    "url": "https://example.com",\n    "sitekey": "0x4AAAAAAA..."\n  }\'',
+      response: '{\n  "status": "created",\n  "task_id": "d2cbb257-9c37-4f9c-..."\n}',
+    };
+
+    function copyCode(btn, snippetId) {
+      const code = codeSnippets[snippetId];
+      if (!code) return;
+
+      navigator.clipboard.writeText(code).then(function () {
+        const t = translations[locale];
+        const label = btn.querySelector(".copy-label");
+        const copyIcon = btn.querySelector(".copy-icon");
+        const checkIcon = btn.querySelector(".check-icon");
+
+        btn.setAttribute("data-state", "copied");
+        if (label) label.textContent = t.copied;
+        if (label) label.classList.add("text-green-400");
+        if (copyIcon) copyIcon.classList.add("hidden");
+        if (checkIcon) checkIcon.classList.remove("hidden");
+
+        setTimeout(function () {
+          btn.setAttribute("data-state", "idle");
+          if (label) label.textContent = t.copyCommand;
+          if (label) label.classList.remove("text-green-400");
+          if (copyIcon) copyIcon.classList.remove("hidden");
+          if (checkIcon) checkIcon.classList.add("hidden");
+        }, 2000);
+      });
+    }
+
+    // ========== Init ==========
+    document.addEventListener("DOMContentLoaded", function () {
+      updateLocale();
+    });
+  </script>
+</body>
+</html>

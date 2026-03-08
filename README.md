@@ -90,16 +90,6 @@ A Python-based Turnstile CAPTCHA solver powered by the Camoufox browser engine. 
 
 ### 🐳 Docker
 
-
-#### Building Locally
-
-```bash
-docker build -t turnstile-solver .
-docker run -d -p 5000:5000 --name turnstile_solver turnstile-solver
-```
-
-Not yet implemented (uploaded), please build or install it yourself
-
 #### Using GitHub Container Registry
 
 Multi-platform images (amd64 & arm64) are automatically built and published via GitHub Actions.
@@ -127,6 +117,14 @@ docker run -d \
   --name turnstile_solver \
   ghcr.io/taozhiyu/turnstile-solver:latest \
   --host 0.0.0.0 --port 5000 --thread 2 --max_cache_age 7200
+```
+
+
+#### Building Locally
+
+```bash
+docker build -t turnstile-solver .
+docker run -d -p 5000:5000 --name turnstile_solver turnstile-solver
 ```
 
 ---

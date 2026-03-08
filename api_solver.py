@@ -382,44 +382,10 @@ class TurnstileAPIServer:
 
     @staticmethod
     async def index():
-        """提供 API 文档首页。"""
-        return """
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Turnstile Solver API</title>
-                <script src="https://cdn.tailwindcss.com"></script>
-            </head>
-            <body class="bg-gray-900 text-gray-200 min-h-screen flex items-center justify-center">
-                <div class="bg-gray-800 p-8 rounded-lg shadow-md max-w-2xl w-full border border-red-500">
-                    <h1 class="text-3xl font-bold mb-6 text-center text-red-500">Welcome to Turnstile Solver API</h1>
-
-                    <p class="mb-4 text-gray-300">To use the turnstile service, send a POST request to
-                       <code class="bg-red-700 text-white px-2 py-1 rounded">/turnstile</code> with JSON body:</p>
-
-                    <ul class="list-disc pl-6 mb-6 text-gray-300">
-                        <li><strong>url</strong>: The URL where Turnstile is to be validated</li>
-                        <li><strong>sitekey</strong>: The site key for Turnstile</li>
-                    </ul>
-
-                    <div class="bg-gray-700 p-4 rounded-lg mb-6 border border-red-500">
-                        <p class="font-semibold mb-2 text-red-400">Example usage:</p>
-                        <code class="text-sm break-all text-red-300">POST /turnstile {"url": "https://example.com", "sitekey": "0x4AAAAAAA"}</code>
-                    </div>
-
-                    <div class="bg-red-900 border-l-4 border-red-600 p-4 mb-6">
-                        <p class="text-red-200 font-semibold">This project is inspired by
-                           <a href="https://github.com/Body-Alhoha/turnaround" class="text-red-300 hover:underline">Turnaround</a>
-                           and is currently maintained by
-                           <a href="https://github.com/Theyka" class="text-red-300 hover:underline">Theyka</a>
-                           and <a href="https://github.com/sexfrance" class="text-red-300 hover:underline">Sexfrance</a>.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-        """
+        """提供 API 文档首页（读取 index.html）。"""
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
 
 
 def parse_args():
