@@ -86,6 +86,12 @@
 | `--port`          | `5000`    | `integer` | API 服务监听端口。                              |
 | `--max_cache_age` | `3600`    | `integer` | 任务缓存最大存活时长（秒），超时后自动清理。    |
 | `--debug`         | `False`   | `boolean` | 启用调试模式，输出详细日志。                    |
+| `--cors`          | `none`    | `string`  | CORS 跨域模式：`none`=禁止跨域，`whitelist`=白名单，`all`=允许所有来源。 |
+| `--cors-origins`  | *（空）*  | `string`  | 跨域白名单，逗号分隔（仅在 `--cors whitelist` 时生效）。例如 `https://a.com,https://b.com` |
+| `--auth-token`    | *（无）*  | `string`  | API 安全密钥。客户端需通过 `Authorization: Bearer <token>` 请求头传入。 |
+| `--basic-auth`    | *（无）*  | `string`  | Basic Auth 凭据，格式为 `user:password`。客户端需通过 `Authorization: Basic <base64>` 请求头传入。 |
+
+> **提示**：`--auth-token` 和 `--basic-auth` 可同时设置，任一方式通过即可。`GET /` 首页和 CORS 预检请求不需要认证。
 
 ---
 
@@ -117,7 +123,8 @@ docker run -d \
   -e TZ=Asia/Shanghai \
   --name turnstile_solver \
   ghcr.io/taozhiyu/turnstile-solver:latest \
-  --host 0.0.0.0 --port 5000 --thread 2 --max_cache_age 7200
+  --host 0.0.0.0 --port 5000 --thread 2 --max_cache_age 7200 \
+  --cors all --auth-token your_secret_token
 ```
 
 #### 本地构建
@@ -137,6 +144,7 @@ docker run -d -p 5000:5000 --name turnstile_solver turnstile-solver
 ```http
 POST /turnstile
 Content-Type: application/json
+Authorization: Bearer <your_token>
 ```
 
 **请求体**：
@@ -206,6 +214,46 @@ GET /result?id=<task_id>
   "status": "error",
   "error": "CAPTCHA_FAIL",
   "elapsed_time": 30.123
+}
+```
+
+---
+
+#### 错误响应
+
+**认证失败**（`401`）—— 启用认证后，请求缺少凭据或凭据无效时返回：
+
+```json
+{
+  "status": "error",
+  "error": "Unauthorized"
+}
+```
+
+**请求体无效**（`400`）：
+
+```json
+{
+  "status": "error",
+  "error": "Invalid JSON body or missing Content-Type: application/json"
+}
+```
+
+**缺少必填参数**（`400`）：
+
+```json
+{
+  "status": "error",
+  "error": "Both 'url' and 'sitekey' are required"
+}
+```
+
+**任务 ID 不存在**（`404`）：
+
+```json
+{
+  "status": "error",
+  "error": "Invalid task ID"
 }
 ```
 

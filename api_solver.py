@@ -3,11 +3,12 @@ import sys
 import time
 import uuid
 import json
+import base64
 import random
 import logging
 import asyncio
 import argparse
-from quart import Quart, request, jsonify
+from quart import Quart, request, jsonify, make_response
 from camoufox.async_api import AsyncCamoufox
 
 COLORS = {
@@ -55,13 +56,19 @@ CLEANUP_INTERVAL_SECONDS = 60
 
 class TurnstileAPIServer:
 
-    def __init__(self, thread: int, proxy_support: bool, max_cache_age: int, debug: bool):
+    def __init__(self, thread: int, proxy_support: bool, max_cache_age: int, debug: bool,
+                 cors_mode: str = 'none', cors_origins: list = None,
+                 auth_token: str = None, basic_auth: str = None):
         self.app = Quart(__name__)
         self.debug = debug
         self.results = self._load_results()
         self.thread_count = thread
         self.proxy_support = proxy_support
         self.max_cache_age = max_cache_age
+        self.cors_mode = cors_mode
+        self.cors_origins = cors_origins or []
+        self.auth_token = auth_token
+        self.basic_auth = basic_auth
         self.browser_pool = asyncio.Queue()
 
         self._setup_routes()
@@ -109,11 +116,71 @@ class TurnstileAPIServer:
                 logger.error(f"Error during periodic cleanup: {str(e)}")
 
     def _setup_routes(self) -> None:
-        """注册路由和启动钩子。"""
+        """注册路由、CORS 和认证中间件、启动钩子。"""
         self.app.before_serving(self._startup)
-        self.app.route('/turnstile', methods=['POST'])(self.process_turnstile)
-        self.app.route('/result', methods=['GET'])(self.get_result)
+        self.app.route('/turnstile', methods=['POST', 'OPTIONS'])(self.process_turnstile)
+        self.app.route('/result', methods=['GET', 'OPTIONS'])(self.get_result)
         self.app.route('/')(self.index)
+
+        # ── CORS 中间件 ──────────────────────────────────────────────────────────
+        if self.cors_mode != 'none':
+            @self.app.after_request
+            async def add_cors_headers(response):
+                origin = request.headers.get('Origin', '')
+                if self.cors_mode == 'all':
+                    response.headers['Access-Control-Allow-Origin'] = '*'
+                elif self.cors_mode == 'whitelist' and origin in self.cors_origins:
+                    response.headers['Access-Control-Allow-Origin'] = origin
+                    response.headers['Vary'] = 'Origin'
+
+                if response.headers.get('Access-Control-Allow-Origin'):
+                    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+                    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+
+                return response
+
+            @self.app.before_request
+            async def handle_preflight():
+                if request.method == 'OPTIONS':
+                    response = await make_response('', 204)
+                    return response
+                return None
+
+        # ── 认证中间件 ────────────────────────────────────────────────────────────
+        if self.auth_token or self.basic_auth:
+            @self.app.before_request
+            async def check_auth():
+                # 跳过首页和 OPTIONS 预检
+                if request.path == '/' and request.method == 'GET':
+                    return None
+                if request.method == 'OPTIONS':
+                    return None
+
+                auth_header = request.headers.get('Authorization', '')
+                # Bearer token 认证
+                if self.auth_token and auth_header.startswith('Bearer '):
+                    token = auth_header[7:]
+                    if token == self.auth_token:
+                        return None
+                # Basic Auth 认证
+                if self.basic_auth and auth_header.startswith('Basic '):
+                    try:
+                        decoded = base64.b64decode(auth_header[6:]).decode('utf-8')
+                        if decoded == self.basic_auth:
+                            return None
+                    except Exception:
+                        pass
+
+                # 认证失败
+                www_auth_parts = []
+                if self.basic_auth:
+                    www_auth_parts.append('Basic realm="Turnstile API"')
+                if self.auth_token:
+                    www_auth_parts.append('Bearer')
+                return jsonify({
+                    "status": "error",
+                    "error": "Unauthorized"
+                }), 401, {'WWW-Authenticate': ', '.join(www_auth_parts)}
 
     async def _startup(self) -> None:
         """服务启动时初始化浏览器池并注册后台清理任务。"""
@@ -128,6 +195,23 @@ class TurnstileAPIServer:
         self._cleanup_expired_tasks()
         asyncio.create_task(self._periodic_cleanup())
         logger.info(f"Periodic cache cleanup enabled (max_cache_age={self.max_cache_age}s)")
+
+        # 日志输出 CORS 和认证配置
+        if self.cors_mode == 'none':
+            logger.info("CORS: disabled (no cross-origin requests allowed)")
+        elif self.cors_mode == 'all':
+            logger.info("CORS: allow all origins (*)")
+        elif self.cors_mode == 'whitelist':
+            logger.info(f"CORS: whitelist mode, allowed origins: {self.cors_origins}")
+
+        if self.auth_token and self.basic_auth:
+            logger.info("Auth: Bearer token + Basic Auth enabled (either accepted)")
+        elif self.auth_token:
+            logger.info("Auth: Bearer token enabled")
+        elif self.basic_auth:
+            logger.info("Auth: Basic Auth enabled")
+        else:
+            logger.warning("Auth: disabled (API is open, no authentication required)")
 
     async def _initialize_browser(self) -> None:
         """初始化 camoufox 浏览器池（headless 模式）。"""
@@ -315,7 +399,20 @@ class TurnstileAPIServer:
     async def process_turnstile(self):
         """处理 /turnstile 端点请求，创建验证码求解任务。"""
 
-        data = await request.get_json()
+        try:
+            data = await request.get_json()
+        except Exception:
+            return jsonify({
+                "status": "error",
+                "error": "Invalid JSON body or missing Content-Type: application/json"
+            }), 400
+
+        if not data or not isinstance(data, dict):
+            return jsonify({
+                "status": "error",
+                "error": "Request body must be a JSON object"
+            }), 400
+
         url = data.get("url")
         cf_selector = data.get("cf_selector") or ".cf-turnstile"
         sitekey = data.get("sitekey")
@@ -404,16 +501,46 @@ def parse_args():
                         help='任务缓存最大存活时长，单位秒（默认: 3600）')
     parser.add_argument('--debug', type=bool, default=False,
                         help='启用调试日志（默认: False）')
+
+    parser.add_argument('--cors', type=str, default='none', choices=['none', 'whitelist', 'all'],
+                        help='CORS 模式：none=禁止跨域, whitelist=白名单, all=允许所有（默认: none）')
+    parser.add_argument('--cors-origins', type=str, default='',
+                        help='CORS 白名单，逗号分隔（仅在 --cors=whitelist 时生效），例如: https://example.com,https://app.test')
+
+    parser.add_argument('--auth-token', type=str, default=None,
+                        help='API 安全密钥，客户端需通过 Authorization: Bearer <token> 请求头传入')
+    parser.add_argument('--basic-auth', type=str, default=None,
+                        help='Basic Auth 凭据，格式为 user:password，客户端需通过 Authorization: Basic <base64> 请求头传入')
     return parser.parse_args()
 
 
-def create_app(thread: int, proxy_support: bool, max_cache_age: int, debug: bool) -> Quart:
+def create_app(thread: int, proxy_support: bool, max_cache_age: int, debug: bool,
+               cors_mode: str = 'none', cors_origins: list = None,
+               auth_token: str = None, basic_auth: str = None) -> Quart:
     """创建并返回 Quart 应用实例。"""
-    server = TurnstileAPIServer(thread=thread, proxy_support=proxy_support, max_cache_age=max_cache_age, debug=debug)
+    server = TurnstileAPIServer(
+        thread=thread, proxy_support=proxy_support, max_cache_age=max_cache_age, debug=debug,
+        cors_mode=cors_mode, cors_origins=cors_origins,
+        auth_token=auth_token, basic_auth=basic_auth,
+    )
     return server.app
 
 
 if __name__ == '__main__':
     args = parse_args()
-    app = create_app(thread=args.thread, proxy_support=args.proxy, max_cache_age=args.max_cache_age, debug=args.debug)
+
+    # 参数校验
+    if args.cors == 'whitelist' and not args.cors_origins:
+        print("Error: --cors-origins is required when --cors=whitelist")
+        sys.exit(1)
+    if args.basic_auth and ':' not in args.basic_auth:
+        print("Error: --basic-auth must be in 'user:password' format")
+        sys.exit(1)
+
+    cors_origins_list = [o.strip() for o in args.cors_origins.split(',') if o.strip()] if args.cors_origins else []
+    app = create_app(
+        thread=args.thread, proxy_support=args.proxy, max_cache_age=args.max_cache_age, debug=args.debug,
+        cors_mode=args.cors, cors_origins=cors_origins_list,
+        auth_token=args.auth_token, basic_auth=args.basic_auth,
+    )
     app.run(host=args.host, port=int(args.port))

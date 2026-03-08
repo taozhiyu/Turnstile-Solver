@@ -85,6 +85,12 @@ A Python-based Turnstile CAPTCHA solver powered by the Camoufox browser engine. 
 | `--port`          | `5000`    | `integer` | Port the API server listens on.                                       |
 | `--max_cache_age` | `3600`    | `integer` | Maximum age (in seconds) for cached task results before auto-cleanup. |
 | `--debug`         | `False`   | `boolean` | Enable debug mode for verbose logging.                                |
+| `--cors`          | `none`    | `string`  | CORS mode: `none` = disable, `whitelist` = allow specific origins, `all` = allow all origins. |
+| `--cors-origins`  | *(empty)* | `string`  | Comma-separated allowed origins (only used with `--cors whitelist`). e.g. `https://a.com,https://b.com` |
+| `--auth-token`    | *(none)*  | `string`  | API secret token. Clients must send `Authorization: Bearer <token>` header. |
+| `--basic-auth`    | *(none)*  | `string`  | Basic Auth credentials in `user:password` format. Clients must send `Authorization: Basic <base64>` header. |
+
+> **Note**: If both `--auth-token` and `--basic-auth` are set, either method is accepted. The `GET /` index page and CORS preflight requests are exempt from authentication.
 
 ---
 
@@ -116,7 +122,8 @@ docker run -d \
   -e TZ=Asia/Shanghai \
   --name turnstile_solver \
   ghcr.io/taozhiyu/turnstile-solver:latest \
-  --host 0.0.0.0 --port 5000 --thread 2 --max_cache_age 7200
+  --host 0.0.0.0 --port 5000 --thread 2 --max_cache_age 7200 \
+  --cors all --auth-token your_secret_token
 ```
 
 
@@ -136,6 +143,7 @@ docker run -d -p 5000:5000 --name turnstile_solver turnstile-solver
 ```http
 POST /turnstile
 Content-Type: application/json
+Authorization: Bearer <your_token>
 ```
 
 **Request Body**:
@@ -205,6 +213,46 @@ GET /result?id=<task_id>
   "status": "error",
   "error": "CAPTCHA_FAIL",
   "elapsed_time": 30.123
+}
+```
+
+---
+
+#### Error Responses
+
+**Unauthorized** (`401`) — returned when authentication is enabled and the request is missing or has invalid credentials:
+
+```json
+{
+  "status": "error",
+  "error": "Unauthorized"
+}
+```
+
+**Bad Request — Invalid JSON** (`400`):
+
+```json
+{
+  "status": "error",
+  "error": "Invalid JSON body or missing Content-Type: application/json"
+}
+```
+
+**Bad Request — Missing Parameters** (`400`):
+
+```json
+{
+  "status": "error",
+  "error": "Both 'url' and 'sitekey' are required"
+}
+```
+
+**Not Found — Invalid Task ID** (`404`):
+
+```json
+{
+  "status": "error",
+  "error": "Invalid task ID"
 }
 ```
 
