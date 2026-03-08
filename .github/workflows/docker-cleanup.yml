@@ -1,0 +1,184 @@
+name: Delete Docker Image on Tag Deletion
+
+on:
+  delete:
+    # NOTE: 仅在 tag 被删除时触发，分支删除会被跳过
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要清理的版本标签 (如 v0.1.1)"
+        required: true
+        type: string
+      skip_delete:
+        description: "跳过删除，仅重新指派标签 (适用于已在 dashboard 手动删除的情况)"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  delete-and-retag:
+    # NOTE: workflow_dispatch 始终运行；delete 事件仅处理 v 开头的 tag
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.ref_type == 'tag' && startsWith(github.event.ref, 'v'))
+    runs-on: ubuntu-latest
+
+    permissions:
+      packages: write
+
+    steps:
+      - name: Extract version from deleted tag
+        id: version
+        run: |
+          # workflow_dispatch 从 inputs 取值，delete 事件从 event.ref 取值
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.ref }}"
+          fi
+          VERSION="${TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
+          echo "Deleted tag: $TAG -> version=$VERSION, major=$MAJOR, major_minor=${MAJOR}.${MINOR}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Delete version and plan re-tagging
+        id: cleanup
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            // NOTE: ghcr.io 包名统一小写
+            const packageName = repo.toLowerCase();
+            const deletedVersion = '${{ steps.version.outputs.version }}';
+            const deletedMajorMinor = '${{ steps.version.outputs.major_minor }}';
+            const deletedMajor = parseInt('${{ steps.version.outputs.major }}');
+
+            const skipDelete = '${{ inputs.skip_delete }}' === 'true';
+            console.log(`Target: ${skipDelete ? 'retag only (skip delete)' : 'delete'} version ${deletedVersion}`);
+
+            // 获取所有 package versions
+            const allVersions = await github.paginate(
+              github.rest.packages.getAllPackageVersionsForPackageOwnedByUser,
+              { package_type: 'container', package_name: packageName, username: owner }
+            );
+
+            // ── 第一步：找到并删除目标版本（如未跳过） ──
+            const deletedIds = [];
+            if (!skipDelete) {
+              for (const ver of allVersions) {
+                const tags = ver.metadata?.container?.tags || [];
+                if (tags.includes(deletedVersion)) {
+                  console.log(`Deleting version id=${ver.id}, tags=[${tags.join(', ')}]`);
+                  try {
+                    await github.rest.packages.deletePackageVersionForUser({
+                      package_type: 'container', package_name: packageName,
+                      username: owner, package_version_id: ver.id,
+                    });
+                    console.log(`Successfully deleted version ${ver.id}`);
+                    deletedIds.push(ver.id);
+                  } catch (err) {
+                    core.setFailed(`Failed to delete version ${ver.id}: ${err.message}`);
+                    return;
+                  }
+                }
+              }
+
+              if (deletedIds.length === 0) {
+                console.log('No matching version found to delete, will still attempt re-tagging');
+              }
+            } else {
+              console.log('Skip delete: assuming version was already removed');
+            }
+
+            // ── 第二步：收集剩余版本的 semver 标签 ──
+            const semverRe = /^(\d+)\.(\d+)\.(\d+)$/;
+            const remaining = [];
+            for (const ver of allVersions) {
+              if (deletedIds.includes(ver.id)) continue;
+              const tags = ver.metadata?.container?.tags || [];
+              for (const t of tags) {
+                const m = t.match(semverRe);
+                if (m) {
+                  remaining.push({
+                    tag: t,
+                    major: parseInt(m[1]),
+                    minor: parseInt(m[2]),
+                    patch: parseInt(m[3]),
+                  });
+                }
+              }
+            }
+
+            // 按 semver 降序排列
+            remaining.sort((a, b) => {
+              if (a.major !== b.major) return b.major - a.major;
+              if (a.minor !== b.minor) return b.minor - a.minor;
+              return b.patch - a.patch;
+            });
+
+            console.log(`Remaining semver versions: ${remaining.map(r => r.tag).join(', ') || '(none)'}`);
+
+            // ── 第三步：规划需要重新指派的标签 ──
+            const retag = [];
+
+            // latest → 全局最高版本
+            if (remaining.length > 0) {
+              retag.push({ source: remaining[0].tag, target: 'latest' });
+            }
+
+            // major.minor 标签 (如 0.1) → 同 major.minor 下的最高 patch
+            const [delMaj, delMin] = deletedMajorMinor.split('.').map(Number);
+            const sameMajorMinor = remaining.filter(r => r.major === delMaj && r.minor === delMin);
+            if (sameMajorMinor.length > 0) {
+              retag.push({ source: sameMajorMinor[0].tag, target: deletedMajorMinor });
+            }
+
+            // major 标签 (如 0) → 同 major 下的最高版本
+            const sameMajor = remaining.filter(r => r.major === deletedMajor);
+            if (sameMajor.length > 0) {
+              retag.push({ source: sameMajor[0].tag, target: String(deletedMajor) });
+            }
+
+            console.log('Re-tag plan:');
+            if (retag.length === 0) {
+              console.log('  (no surviving versions, nothing to re-tag)');
+            }
+            for (const r of retag) {
+              console.log(`  ${r.source} -> :${r.target}`);
+            }
+
+            core.setOutput('retag_json', JSON.stringify(retag));
+
+      # NOTE: 使用 docker buildx imagetools 直接操作 manifest，无需拉取完整镜像
+      - name: Re-tag surviving versions
+        if: steps.cleanup.outputs.retag_json != '[]'
+        env:
+          RETAG_JSON: ${{ steps.cleanup.outputs.retag_json }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          echo "$RETAG_JSON" | jq -c '.[]' | while read -r entry; do
+            SOURCE=$(echo "$entry" | jq -r '.source')
+            TARGET=$(echo "$entry" | jq -r '.target')
+            echo "Re-tagging: ${IMAGE}:${SOURCE} -> ${IMAGE}:${TARGET}"
+            docker buildx imagetools create -t "${IMAGE}:${TARGET}" "${IMAGE}:${SOURCE}"
+          done
