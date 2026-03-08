@@ -36,6 +36,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m camoufox fetch
 
 COPY api_solver.py .
+COPY index.html .
 COPY proxies.txt .
 
 EXPOSE 5000
